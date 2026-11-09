@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: ambiente-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: INGEST_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: '[]'
+      - key: ML_AUTO_TRAIN_ENABLED
+        value: 'true'
+      - key: ML_CHECK_SECONDS
+        value: '300'
+      - key: ML_RETRAIN_SECONDS
+        value: '3600'
+      - key: ML_MIN_NEW_SAMPLES
+        value: '120'

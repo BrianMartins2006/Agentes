@@ -149,3 +149,12 @@ O treino automático está habilitado por padrão durante a execução da API. A
 5 minutos verifica o histórico; para retreinar exige intervalo de uma hora e 120
 novas medições. Os requisitos de continuidade/variação do dataset também se aplicam.
 Veja [`ml/README.md`](ml/README.md). Nenhum deploy foi realizado nesta etapa.
+
+
+## Deploy da API e proteção do Supabase
+
+A configuração da Render está em `render.yaml`. Siga
+[`docs/deploy-render.md`](docs/deploy-render.md) para conectar o repositório e
+configurar os segredos. A migração `0003` habilita RLS em `measurements`,
+`forecast_models` e `alembic_version`, sem políticas públicas. O acesso direto do
+backend com o proprietário do banco é preservado.
