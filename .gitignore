@@ -1,0 +1,54 @@
+# Credenciais locais (manter os exemplos versionados)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+secrets.h
+secrets.json
+
+# Ambientes e arquivos gerados pelo Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# Dados locais, logs e modelos exportados
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.pkl
+*.pickle
+*.joblib
+/ml/artifacts/
+/ml/exports/
+/backups/
+
+# Builds de frontend e firmware
+node_modules/
+dist/
+build/
+.pio/
+*.elf
+*.hex
+*.bin
+
+# Configurações locais de ferramentas e sistema
+/.agents/
+/.codex/
+/.aws/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
