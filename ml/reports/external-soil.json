@@ -1,0 +1,131 @@
+{
+  "schema_version": "external-soil-v1",
+  "algorithm": "RandomForestRegressor",
+  "target": "soil_moisture_pct",
+  "source": {
+    "title": "Ten-Minute Atmospheric and Soil-Moisture Time Series for the Arta Pilot, Greece (2015–2026)",
+    "authors": "Salmas, Kapsala, Giavis, Pachoulas and Stylios; University of Ioannina",
+    "url": "https://zenodo.org/records/21703750",
+    "doi": "10.5281/zenodo.21703750",
+    "license": "CC BY 4.0",
+    "station": "Kompoti",
+    "depth_cm": 10,
+    "sampling_minutes": 10,
+    "timestamp_timezone": "Not specified in source documentation; original timestamps preserved"
+  },
+  "provenance": {
+    "archive_sha256": "ce73fe7b69ce54ab405909ef92285f19259e0650bddf00015a3be6c20e0952f8",
+    "files": [
+      "kompoti_soil-moisture-10cm_openhi_10min_2015-2026.csv",
+      "kompoti_air-temperature_openhi_10min_2015-2026.csv",
+      "kompoti_relative-humidity_openhi_10min_2015-2026.csv"
+    ],
+    "aligned_rows_total": 567354,
+    "selected_rows": 10000,
+    "quality": {
+      "soil-moisture-10cm": {
+        "invalid_rows": 10215,
+        "conflicting_timestamps": 0
+      },
+      "air-temperature": {
+        "invalid_rows": 7037,
+        "conflicting_timestamps": 0
+      },
+      "relative-humidity": {
+        "invalid_rows": 29377,
+        "conflicting_timestamps": 0
+      }
+    },
+    "max_points": 10000
+  },
+  "features": [
+    "soil_moisture_pct",
+    "temperature_c",
+    "air_humidity_pct",
+    "soil_30min_ago_pct",
+    "soil_change_30min_pp"
+  ],
+  "parameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 8,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 3,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 100,
+    "n_jobs": 1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "sklearn_version": "1.9.1",
+  "horizon_minutes": 30,
+  "metrics": {
+    "model_mae": 0.10781557888455155,
+    "model_rmse": 0.14767807948126482,
+    "baseline_mae": 0.019831730769230775,
+    "baseline_rmse": 0.04471240004684069,
+    "unit": "percentage_points"
+  },
+  "beats_baseline": false,
+  "train_samples": 7480,
+  "test_samples": 2496,
+  "train_start": "2026-05-19T10:40:00",
+  "train_target_end": "2026-07-10T10:50:00",
+  "test_start": "2026-07-10T11:30:00",
+  "test_end": "2026-07-27T21:00:00",
+  "dataset_sha256": "86c5bdff88db4d182371a7e49401003fbeb410f1dbfd463af5fd5c59d0bf2262",
+  "feature_importances": {
+    "soil_moisture_pct": 0.9973836658426296,
+    "temperature_c": 0.0013854131522731022,
+    "air_humidity_pct": 0.0010410248873085784,
+    "soil_30min_ago_pct": 9.875818904866216e-05,
+    "soil_change_30min_pp": 9.113792873984033e-05
+  },
+  "test_examples": [
+    {
+      "based_on": "2026-07-27T19:50:00",
+      "target_at": "2026-07-27T20:20:00",
+      "current_soil_pct": 6.8,
+      "actual_soil_pct": 6.8,
+      "predicted_soil_pct": 6.7969
+    },
+    {
+      "based_on": "2026-07-27T20:00:00",
+      "target_at": "2026-07-27T20:30:00",
+      "current_soil_pct": 6.8,
+      "actual_soil_pct": 6.8,
+      "predicted_soil_pct": 6.7969
+    },
+    {
+      "based_on": "2026-07-27T20:10:00",
+      "target_at": "2026-07-27T20:40:00",
+      "current_soil_pct": 6.8,
+      "actual_soil_pct": 6.8,
+      "predicted_soil_pct": 6.7969
+    },
+    {
+      "based_on": "2026-07-27T20:20:00",
+      "target_at": "2026-07-27T20:50:00",
+      "current_soil_pct": 6.8,
+      "actual_soil_pct": 6.7,
+      "predicted_soil_pct": 6.7969
+    },
+    {
+      "based_on": "2026-07-27T20:30:00",
+      "target_at": "2026-07-27T21:00:00",
+      "current_soil_pct": 6.8,
+      "actual_soil_pct": 6.7,
+      "predicted_soil_pct": 6.7969
+    }
+  ],
+  "usage": "External historical experiment only; not calibrated or validated for the ESP32 sensor",
+  "model_id": "dc0977c3-db23-4a61-aabd-19021318cf6b"
+}

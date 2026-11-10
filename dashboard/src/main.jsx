@@ -34,7 +34,7 @@ function exportCSV(rows) {
 }
 function App() {
   const [config,setConfig]=useState(null),[auto,setAuto]=useState(true),[tick,setTick]=useState(0);
-  const [state,setState]=useState({rows:[],latest:null,prediction:null,loading:false,message:'Abra a engrenagem no topo para conectar sua estação.',currentError:false});
+  const [state,setState]=useState({rows:[],latest:null,prediction:null,external:null,loading:false,message:'Abra a engrenagem no topo para conectar sua estação.',currentError:false});
   const [formError,setFormError]=useState('');
   const [period,setPeriod]=useState(()=>({since:initialDate(),until:''}));
   const settingsDialog=useRef(null), settingsForm=useRef(null), settingsButton=useRef(null);
@@ -50,7 +50,7 @@ function App() {
   useEffect(()=>{
     if(!config)return;
     const controller=new AbortController();let active=true;
-    setState({rows:[],latest:null,prediction:null,loading:true,message:`Consultando ${config.device}…`,currentError:false});
+    setState({rows:[],latest:null,prediction:null,external:null,loading:true,message:`Consultando ${config.device}…`,currentError:false});
     async function request(path,params) {
       const timeout=setTimeout(()=>controller.abort(),15000);
       try {const response=await fetch(API+path+'?'+params,{headers:{'X-API-Key':config.key},signal:controller.signal,cache:'no-store'});
@@ -58,12 +58,13 @@ function App() {
       } finally {clearTimeout(timeout);}
     }
     const params=new URLSearchParams({device_id:config.device,since:config.since,limit:1000});if(config.until)params.set('until',config.until);
-    Promise.allSettled([request('/api/v1/measurements',params),request('/api/v1/measurements',new URLSearchParams({device_id:config.device,limit:1})),request('/api/v1/predictions',new URLSearchParams({device_id:config.device}))]).then(results=>{
+    Promise.allSettled([request('/api/v1/measurements',params),request('/api/v1/measurements',new URLSearchParams({device_id:config.device,limit:1})),request('/api/v1/predictions',new URLSearchParams({device_id:config.device})),request('/api/v1/experiments/soil',new URLSearchParams())]).then(results=>{
       if(!active)return;
       const rows=results[0].status==='fulfilled'?results[0].value:[],latest=results[1].status==='fulfilled'?results[1].value[0]??null:null;
       const prediction=results[2].status==='fulfilled'?results[2].value:{status:'unavailable',reason:'Falha ao consultar o modelo.'};
-      const errors=results.filter(r=>r.status==='rejected').map(r=>r.reason.name==='AbortError'?'Tempo de consulta esgotado.':r.reason.message);
-      setState({rows,latest,prediction,loading:false,currentError:results[1].status==='rejected',message:errors.length?[...new Set(errors)].join(' '):`${config.device} · Atualizado às ${new Date().toLocaleTimeString('pt-BR')}. ${rows.length===1000?'Limite de 1.000 amostras: reduza o período.':''} Tabela: até 100 linhas; CSV: todas as carregadas.`});
+      const external=results[3].status==='fulfilled'?results[3].value:{status:'unavailable',reason:'Experimento externo indisponível; confira o deploy da API.'};
+      const errors=results.slice(0,3).filter(r=>r.status==='rejected').map(r=>r.reason.name==='AbortError'?'Tempo de consulta esgotado.':r.reason.message);
+      setState({rows,latest,prediction,external,loading:false,currentError:results[1].status==='rejected',message:errors.length?[...new Set(errors)].join(' '):`${config.device} · Atualizado às ${new Date().toLocaleTimeString('pt-BR')}. ${rows.length===1000?'Limite de 1.000 amostras: reduza o período.':''} Tabela: até 100 linhas; CSV: todas as carregadas.`});
     });
     return()=>{active=false;controller.abort();};
   },[config,tick]);
@@ -86,7 +87,7 @@ function App() {
     if(!config){openSettings();return;}
     setConfig({...config,...dates});
   }
-  const {rows,latest,prediction,loading}=state;
+  const {rows,latest,prediction,external,loading}=state;
   const age=latest?(Date.now()-new Date(latest.received_at))/1000:null;
   const status=loading?'Consultando':state.currentError?'Falha de comunicação':!config?'Aguardando conexão':!latest?'Dispositivo sem dados':age < -60?'Relógio inconsistente':age<=300?'Dados atualizados':'Dados atrasados';
   const available=prediction&&['available','experimental'].includes(prediction.status);
@@ -111,6 +112,16 @@ function App() {
     <section className="charts"><Chart rows={rows} field="temperature_c" title="Temperatura" unit="°C" color="#f1bb80"/><Chart rows={rows} field="air_humidity_pct" title="Umidade do ar" unit="%" color="#83c9d4"/><Chart rows={rows} field="soil_raw" title="Leitura do solo" unit="valor bruto" color="#b7f16e" wide/></section>
     <p className="muted">Datas no fuso do navegador. Lacunas maiores que 5 minutos interrompem as linhas. Cartões e previsão mostram o estado mais recente, independente do período filtrado.</p>
     <section className="panel prediction"><div><p className="eyebrow">APRENDIZADO DE MÁQUINA · RANDOM FOREST</p><p className="muted">{prediction ? `Treinamento automático ${prediction.automatic_training ? "ativado" : "desativado"}${prediction.trained_at ? ` · Último treino: ${fmt(prediction.trained_at)}` : ""}` : ""}</p><h2>Um olhar para os próximos 30 minutos.</h2><p role="status">{loading?'Consultando modelo…':available?prediction.notice:prediction?.reason||'Conecte a estação para consultar o modelo.'}</p>{available&&<p className="muted">MAE do modelo: {num(prediction.metrics.model_mae,2)} · baseline: {num(prediction.metrics.baseline_mae,2)} (leitura bruta). Modelo {prediction.model_id}. Percentual estimado: {num(prediction.estimated_soil_pct)}% pela calibração do firmware; validar no solo real.</p>}</div><div className="prediction-result"><strong>{available?num(prediction.predicted_soil_raw):'—'}</strong><span>leitura bruta prevista do solo</span>{available&&<span>Para {fmt(prediction.target_at)}</span>}</div></section>
+    <section className="panel external-experiment" aria-label="Experimento de solo com dados públicos">
+      <p className="eyebrow">EXPERIMENTO SEPARADO · DATASET PÚBLICO · RANDOM FOREST</p><h2>Aprendizado com solo em condições de campo</h2>
+      <p className="muted">Este experimento usa dados históricos de outra estação. Não é uma previsão validada para sua ESP32 e não usa a escala bruta 0–4095.</p>
+      {external?.status==='external_experiment'?<><p>{external.beats_baseline?'O modelo superou a persistência no teste temporal externo.':'Modelo treinado; não superou a persistência no teste externo. Resultado experimental.'}</p>
+        <div className="external-metrics"><div><span>MAE do modelo</span><strong>{num(external.metrics.model_mae,3)} pp</strong></div><div><span>MAE de persistência</span><strong>{num(external.metrics.baseline_mae,3)} pp</strong></div><div><span>Exemplos de treino / teste</span><strong>{num(external.train_samples,0)} / {num(external.test_samples,0)}</strong></div></div>
+        <p className="muted">Horizonte: {external.horizon_minutes} minutos · Erros em pontos percentuais (pp) · Estação {external.source.station}, solo a {external.source.depth_cm} cm · <a href="https://zenodo.org/records/21703750" target="_blank" rel="noreferrer">Fonte: Zenodo / Universidade de Ioannina</a> · CC BY 4.0</p>
+        <p className="muted">Período de teste: {external.test_start.replace('T',' ')} a {external.test_end.replace('T',' ')} (horários originais, fuso não informado pela fonte).</p>
+        {external.test_examples?.length>0&&<div className="table-scroll"><table><caption className="sr-only">Exemplos históricos externos, não leituras da ESP32</caption><thead><tr><th>Horário-alvo histórico</th><th>Umidade observada (%)</th><th>Umidade prevista (%)</th></tr></thead><tbody>{external.test_examples.map(row=><tr key={row.target_at}><td>{row.target_at.replace('T',' ')}</td><td>{num(row.actual_soil_pct,2)}</td><td>{num(row.predicted_soil_pct,2)}</td></tr>)}</tbody></table></div>}
+      </>:<p>{loading?'Consultando experimento…':external?.reason||'Conecte a estação para consultar o experimento externo.'}</p>}
+    </section>
     <section className="panel data"><div className="section-title"><h3>Medições no período</h3><button type="button" disabled={!rows.length} onClick={()=>exportCSV(rows)}>Exportar CSV ↓</button></div><div className="table-scroll"><table><caption className="sr-only">Medições do dispositivo selecionado</caption><thead><tr><th>Horário da medição</th><th>Temperatura (°C)</th><th>Umidade do ar (%)</th><th>Solo (bruto)</th></tr></thead><tbody>{rows.length?rows.slice(0,100).map(r=><tr key={r.id}><td>{fmt(r.measured_at)}</td><td>{num(r.temperature_c)}</td><td>{num(r.air_humidity_pct)}</td><td>{num(r.soil_raw,0)}</td></tr>):<tr><td colSpan="4">Nenhuma medição carregada</td></tr>}</tbody></table></div></section><footer>Ambiente · Agentes, IoT e Aprendizado de Máquina<span>React → FastAPI → PostgreSQL</span></footer>
   </main></>;
 }

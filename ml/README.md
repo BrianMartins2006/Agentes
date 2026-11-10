@@ -154,3 +154,14 @@ O modelo mais recente é publicado mesmo quando experimental; as métricas e o a
 indicam quando ele não supera a persistência. Não há seleção automática de modelos
 por resultados repetidos no teste. Cada retreino é uma nova avaliação temporal;
 a qualidade ainda precisa de confirmação num período de campo independente.
+
+
+## Dataset externo já treinado
+
+Foi adicionado um experimento Random Forest com solo em % da estação Kompoti,
+publicado no Zenodo. O modelo está salvo separadamente no banco e o relatório é
+exibido em uma seção própria da dashboard. Ele não substitui o modelo nativo da
+ESP32 nem converte artificialmente os dados externos em leituras brutas.
+Veja [`EXTERNAL_DATASET.md`](EXTERNAL_DATASET.md) e
+[`reports/external-soil.json`](reports/external-soil.json) para fonte, licença,
+resultado efetivo e comandos. O modelo externo não superou a persistência no teste.

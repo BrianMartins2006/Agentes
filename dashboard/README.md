@@ -78,3 +78,9 @@ Vercel + Render, os serviços ficam separados e o build roda somente na Vercel.
 
 Referências: [Vite na Vercel](https://vercel.com/docs/frameworks/frontend/vite)
 e [CORS no FastAPI](https://fastapi.tiangolo.com/tutorial/cors/).
+
+
+A seção **Experimento separado — Dataset público** consulta
+`/api/v1/experiments/soil` e mostra o Random Forest treinado em dados públicos,
+comparação com persistência e exemplos históricos, com fonte e licença. A seção
+não apresenta esses dados como leituras ou previsões válidas para a ESP32.

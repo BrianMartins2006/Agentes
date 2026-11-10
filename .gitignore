@@ -7,6 +7,9 @@
 *.key
 secrets.h
 secrets.json
+*.swp
+*.swo
+*~
 
 # Ambientes e arquivos gerados pelo Python
 .venv/

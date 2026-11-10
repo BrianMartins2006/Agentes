@@ -158,3 +158,12 @@ A configuração da Render está em `render.yaml`. Siga
 configurar os segredos. A migração `0003` habilita RLS em `measurements`,
 `forecast_models` e `alembic_version`, sem políticas públicas. O acesso direto do
 backend com o proprietário do banco é preservado.
+
+
+## Envio direto pela ESP32
+
+O firmware atual implementa envio HTTPS direto à Render a cada 30 segundos, com
+validação TLS e horário UTC via NTP. Consulte [`firmware/README.md`](firmware/README.md)
+para preparar `secrets.h` e gravar na placa. Este modo dispensa o coletor local e a
+configuração de IP na troca de rede. O teste em hardware ainda precisa ser realizado;
+pare o coletor Python antes para evitar duplicação de amostras.

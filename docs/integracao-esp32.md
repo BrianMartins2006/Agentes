@@ -1,4 +1,24 @@
-# Integração sem alterar firmware
+# Modos de integração da ESP32
+
+## Envio direto — modo recomendado atual
+
+O firmware em `firmware/monitoramento_ambiental/` agora envia medições por HTTPS
+diretamente à Render, sem depender da comunicação local com um computador.
+Configuração da chave, versão do core, Wi-Fi, NTP e teste em hardware estão em
+[`firmware/README.md`](../firmware/README.md).
+
+Antes de gravar essa versão, pare o coletor Python. Após conectar e sincronizar o
+relógio, confira `HTTP 201` no Monitor Serial. Não é necessário alterar o IP no
+`.env` quando trocar de rede. Esse IP continua útil apenas para o painel local.
+A placa precisa de internet liberada; isolamento entre clientes não é a mesma coisa
+que bloqueio de saída HTTPS ou NTP. O teste físico do envio direto ainda está pendente.
+
+## Coletor local — modo alternativo legado
+
+O conteúdo abaixo descreve o fluxo original, ainda disponível para firmware antigo.
+Não executar o coletor simultaneamente ao envio direto para o mesmo dispositivo.
+
+### Contrato original
 
 ## Contrato confirmado pelo código fornecido
 
@@ -13,7 +33,7 @@
 
 O coletor não armazena nem utiliza as credenciais Wi-Fi do código fornecido.
 Após autorização, foi criado um sketch com configuração Wi-Fi pelo celular em
-`firmware/`. Ele preserva o contrato HTML, sem envio direto à nuvem nesta versão.
+`firmware/`. O contrato HTML foi preservado. A versão mais recente também envia diretamente à nuvem.
 
 ## Funcionamento do coletor
 

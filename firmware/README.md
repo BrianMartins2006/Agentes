@@ -1,63 +1,96 @@
-# ESP32 com troca de rede pelo celular
+# ESP32: Wi-Fi configurável e envio direto HTTPS
 
-Firmware preparado após autorização do usuário. Mantém DHT11 GPIO4, solo GPIO34,
-calibração 4095/2901 e o formato HTML consumido pelo coletor. Não inclui as
-credenciais Wi-Fi compartilhadas anteriormente. Este sketch ainda não foi compilado
-ou gravado em hardware nesta sessão.
+O firmware lê DHT11 no GPIO4 e solo no GPIO34, mantém o painel local e envia
+medições diretamente para o FastAPI na Render. Não precisa de coletor Python nem
+de acesso do computador ao IP da placa. O Wi-Fi ainda precisa permitir internet,
+HTTPS (porta 443), DNS e sincronização NTP (UDP 123).
 
 ## Preparar no Arduino IDE
 
-1. Instale o suporte de placas ESP32 e selecione o modelo real da sua placa/porta.
-2. Instale pelo Gerenciador de Bibliotecas **WiFiManager**, autor **tzapu**,
-   **DHT sensor library**, da Adafruit, e sua dependência **Adafruit Unified Sensor**.
+1. Use o suporte **ESP32 da Espressif 3.3.12**, usado na compilação desta versão.
+   O método de certificados `useBuiltinCACertBundle()` depende desse suporte.
+2. Instale **WiFiManager**, de tzapu, **DHT sensor library**, da Adafruit, e
+   **Adafruit Unified Sensor**.
 3. Abra `monitoramento_ambiental/monitoramento_ambiental.ino`.
-4. Personalize `portalPassword` (mínimo 8 caracteres). Essa senha protege a rede de
-   configuração; não é a senha do roteador.
-5. Compile e grave por USB. Abra o Monitor Serial em 115200 baud.
+4. Confira o arquivo `secrets.h` na mesma pasta. Ele foi preparado localmente a
+   partir da chave do `.env` e está ignorado pelo Git. Em outro computador, copie
+   `secrets.example.h` para `secrets.h` e preencha:
 
-## Usar em outra rede
+```cpp
+#define API_BASE_URL "https://ambiente-api.onrender.com"
+#define INGEST_API_KEY "CHAVE_IGUAL_A_DA_RENDER"
+#define DEVICE_ID "esp32-01"
+#define UPLOAD_INTERVAL_MS 30000UL
+```
 
-1. Ligue a placa no novo local. Ela tenta a última rede salva por até 20 segundos.
-2. Se não conectar, cria a rede `Ambiente-ESP32-XXXXXX`, identificada também no Serial.
-3. No celular, conecte nessa rede usando a senha `portalPassword` do sketch.
-   Aceite permanecer conectado mesmo sem acesso à internet.
-4. Abra `http://192.168.4.1` se a página de configuração não abrir automaticamente.
-5. Escolha **Configure WiFi**, selecione a rede do local, informe a senha e salve.
-6. A placa tenta conectar; após sucesso, o painel passa a usar o IP atribuído pelo
-   roteador, mostrado no Monitor Serial. O celular deve voltar à rede do local
-   para acessar esse painel. `192.168.4.1` é o portal de configuração, não um IP
-   permanente de monitoramento.
+5. Personalize `portalPassword` no sketch se necessário. Essa senha é apenas da
+   rede temporária da placa; não é a chave da API ou a senha do Wi-Fi do local.
+6. Selecione sua ESP32 e porta USB, compile e grave. Abra o Monitor Serial a 115200.
 
-O portal fica disponível por cinco minutos; se não concluir, a placa reinicia e
-repete a tentativa. As credenciais válidas ficam salvas para os próximos boots.
-Se cair o Wi-Fi durante o funcionamento, a placa tenta reconectar; após 60 segundos
-sem conexão, reinicia e repete a rotina de conexão/portal.
+Não publique `secrets.h` nem binários contendo a chave. O backend continua sendo o
+único componente com senha do PostgreSQL. Se mudar a chave da API na Render,
+atualize `secrets.h` e grave novamente. A chave atual do projeto é compartilhada;
+autenticação específica por dispositivo continua uma melhoria futura.
 
-Se quiser trocar de rede enquanto a antiga ainda funciona, digite `w` no Monitor
-Serial: isso apaga as credenciais Wi-Fi e reinicia em configuração. Não há comando
-remoto aberto para apagar a rede. Não foi adicionado botão ou alterada a fiação.
+## Trocar de rede
 
-## O que acontece com o backend
+A placa tenta o Wi-Fi salvo por até 20 segundos. Se falhar, abre a rede
+`Ambiente-ESP32-XXXXXX`. Conecte o celular usando `portalPassword`, aceite ficar
+sem internet e abra http://192.168.4.1. Em **Configure WiFi**, escolha a rede e
+informe a senha. O portal pode ficar aberto por até 5 minutos; sem configurar, a
+placa reinicia e tenta de novo. As credenciais válidas ficam salvas na placa.
 
-Nesta versão, a coleta ainda passa pelo computador/Raspberry Pi na mesma rede da
-ESP32. Atualize `ESP32_URL` no `.env` para o novo IP e reinicie o coletor. Se o IP
-mudar novamente pelo DHCP, essa configuração precisa ser atualizada novamente.
-O portal resolve a troca das credenciais Wi-Fi, não a descoberta automática do IP.
-Redes com isolamento entre dispositivos podem impedir a coleta local.
+Se a conexão cair durante o funcionamento, tenta reconectar e reinicia após
+60 segundos sem rede para reabrir o fluxo de configuração. O comando `w` no Monitor
+Serial apaga o Wi-Fi salvo e reinicia, útil para trocar voluntariamente de rede.
+Esse comando é processado no loop, após eventual requisição HTTPS em andamento.
 
-A evolução para eliminar essa configuração de IP é a ESP32 enviar medições por
-HTTPS ao endereço fixo da API na Render. Esse envio direto ainda não foi
-implementado neste sketch. Exigirá configuração de URL/chave do dispositivo,
-validação do certificado TLS, sincronização do relógio e tratamento de falhas.
-O Supabase permanecerá acessível somente pelo backend, sem senha do banco na placa.
+O novo IP só serve para acessar o painel local. Não é mais necessário atualizar
+`ESP32_URL` para o envio direto. Mesmo se o campus isolar os dispositivos entre si,
+a placa pode enviar à nuvem, desde que a própria placa tenha acesso à internet.
+Uma rede com página de login, autenticação institucional não configurada ou
+bloqueios de portas ainda pode impedir esse envio.
 
-## Validação na placa
+## Conferir o envio
 
-- Primeira configuração pelo celular e acesso ao painel na rede escolhida.
-- Reinício com reconexão automática e manutenção das credenciais.
-- Troca para uma segunda rede e atualização do coletor para o novo IP.
-- Queda temporária da rede, recuperação e ausência prolongada abrindo o portal.
-- Comando `w`, senha incorreta e expiração do portal sem configuração.
-- Leituras reais do DHT11/solo e compatibilidade com o coletor existente.
+Depois de conectar, o Serial mostra a sincronização UTC por NTP. Com o relógio
+sincronizado, deve aparecer a cada ciclo:
 
-Referência: [WiFiManager oficial](https://github.com/tzapu/WiFiManager).
+```text
+Medicao enviada diretamente para a nuvem: HTTP 201, solo=..., horario=...
+```
+
+- `Envio aguardando horario NTP`: sem relógio válido, não envia timestamp inventado.
+  Verifique acesso a NTP ou teste uma rede com internet sem bloqueios.
+- `HTTP 401`: chave diferente da configurada na API.
+- Outro código HTTP: consultar o estado da API e os logs da Render.
+- `Falha HTTPS`: verificar internet, DNS, relógio e certificado.
+- DHT11 inválido: a amostra inteira é descartada.
+
+A validação TLS usa o bundle de certificados do core, sem `setInsecure()`.
+A requisição tem timeout de conexão de 15 s, handshake de 15 s e leitura de 60 s
+para acomodar a inicialização da Render Free. Durante o POST síncrono, o painel
+local e comandos seriais podem ficar temporariamente sem resposta. É uma primeira
+implementação simples; separar a comunicação em tarefa própria é uma evolução.
+
+Não há fila persistente nem reenvio da mesma amostra após erro: um POST pode ter
+sido salvo mesmo que a resposta se perca. O próximo ciclo obtém uma nova leitura.
+Não execute simultaneamente o coletor Python para o mesmo dispositivo, para evitar
+medições duplicadas. Pare-o com Ctrl+C antes de testar o firmware direto.
+
+## Fluxo completo
+
+Sensores → ESP32 → Wi-Fi com internet → HTTPS Render → PostgreSQL Supabase →
+dashboard React na Vercel. O modelo continua no backend, sem treinamento na placa.
+O computador só é necessário para programar e acompanhar o Serial; depois a placa
+precisa de alimentação e internet. A dashboard consulta atualizações a cada 30 s.
+
+## Validação em hardware pendente
+
+A compilação não substitui o teste físico. Após gravar, verificar: configuração
+Wi-Fi, sincronização NTP, HTTP 201, incremento no banco/painel, erro de chave,
+queda da rede e reconexão. Se NTP/HTTPS forem bloqueados no campus, solicitar acesso
+apropriado ou usar um hotspot autorizado em 2,4 GHz com internet.
+
+Referência: [WiFiManager](https://github.com/tzapu/WiFiManager) e
+[NetworkClientSecure oficial](https://github.com/espressif/arduino-esp32/tree/master/libraries/NetworkClientSecure).
