@@ -7,7 +7,7 @@ os.environ.setdefault("INGEST_API_KEY", "test-key")
 import httpx
 import pytest
 
-from app.collector import CollectorSettings, collect_once, parse_measurement
+from app.collector import CollectorSettings, collect_once, parse_measurement, describe_failure, create_esp32_client
 
 
 # HTML shape from the supplied firmware; synthetic readings, no Wi-Fi credentials.
@@ -91,3 +91,52 @@ def test_backend_timeout_does_not_retry():
         with pytest.raises(httpx.ReadTimeout):
             collect_once(client, config)
     assert len(requests) == 2
+
+
+@pytest.mark.parametrize("method,stage", [("GET", "ESP32"), ("POST", "API")])
+def test_connection_error_identifies_stage_without_credentials(method, stage):
+    request = httpx.Request(method, "https://user:secret@example.com/?key=private")
+    error = httpx.ConnectError("sensitive detail", request=request)
+    description = describe_failure(error)
+    assert stage in description
+    assert "ConnectError" in description
+    assert "secret" not in description
+    assert "private" not in description
+    assert "sensitive" not in description
+
+
+def test_local_collection_bypasses_environment_proxy(monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            assert self.headers['Connection'] == 'close'
+            assert 'X-API-Key' not in self.headers
+            body = HTML.encode()
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    for variable in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'):
+        monkeypatch.setenv(variable, 'http://127.0.0.1:1')
+    monkeypatch.setenv('NO_PROXY', '')
+    monkeypatch.setenv('no_proxy', '')
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    config = CollectorSettings(esp32_url=f'http://127.0.0.1:{server.server_port}/')
+    def api_handler(request):
+        assert request.method == 'POST'
+        return httpx.Response(201, json={'id': 99})
+    try:
+        with create_esp32_client(config) as local, httpx.Client(transport=httpx.MockTransport(api_handler)) as api:
+            assert collect_once(api, config, esp32_client=local) == 99
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)

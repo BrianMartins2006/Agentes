@@ -21,6 +21,9 @@ class CollectorSettings(Settings):
     device_id: str = "esp32-01"
     api_base_url: HttpUrl = HttpUrl("http://127.0.0.1:8000")
     poll_seconds: float = Field(default=10, ge=3, allow_inf_nan=False)
+    esp32_timeout_seconds: float = Field(default=10, ge=1, le=120, allow_inf_nan=False)
+    api_timeout_seconds: float = Field(default=75, ge=1, le=180, allow_inf_nan=False)
+    api_trust_env: bool = False
 
 
 class CardParser(HTMLParser):
@@ -68,18 +71,40 @@ def parse_measurement(html: str, device_id: str, measured_at: datetime) -> Measu
     return MeasurementCreate(device_id=device_id, measured_at=measured_at, **values)
 
 
-def collect_once(client: httpx.Client, config: CollectorSettings) -> int:
+def create_esp32_client(config: CollectorSettings) -> httpx.Client:
+    # The ESP32 is on the LAN: never route it through HTTP_PROXY/ALL_PROXY.
+    # Its embedded server also should not retain an idle connection across cycles.
+    return httpx.Client(
+        trust_env=False, follow_redirects=False, timeout=config.esp32_timeout_seconds,
+        headers={"Connection": "close"}, limits=httpx.Limits(max_keepalive_connections=0),
+    )
+
+
+def collect_once(client: httpx.Client, config: CollectorSettings,
+                 esp32_client: httpx.Client | None = None) -> int:
     # The API key is sent only to the backend, never to the ESP32.
-    response = client.get(str(config.esp32_url))
+    response = (esp32_client or client).get(str(config.esp32_url), timeout=config.esp32_timeout_seconds)
     response.raise_for_status()
     payload = parse_measurement(response.text, config.device_id, datetime.now(timezone.utc))
     result = client.post(
         str(config.api_base_url).rstrip("/") + "/api/v1/measurements",
         headers={"X-API-Key": config.ingest_api_key.get_secret_value()},
         json=payload.model_dump(mode="json"),
+        timeout=httpx.Timeout(config.api_timeout_seconds, connect=15),
     )
     result.raise_for_status()
     return result.json()["id"]
+
+
+def describe_failure(exc):
+    if isinstance(exc, httpx.HTTPError):
+        try:
+            stage = "ESP32: leitura da página" if exc.request.method == "GET" else "API: envio da medição"
+        except RuntimeError:
+            stage = "conexão HTTP"
+        status = f", HTTP {exc.response.status_code}" if isinstance(exc, httpx.HTTPStatusError) else ""
+        return f"{stage} — {type(exc).__name__}{status}"
+    return "validação das leituras ou da resposta da API — " + type(exc).__name__
 
 
 def main():
@@ -87,17 +112,24 @@ def main():
     args_parser.add_argument("--once", action="store_true", help="Coletar apenas uma amostra")
     args = args_parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     config = CollectorSettings()
+    logger.info("Lendo ESP32 em %s://%s:%s, conexão local sem proxy",
+                config.esp32_url.scheme, config.esp32_url.host, config.esp32_url.port)
+    logger.info("Enviando para API em %s://%s:%s (proxy do ambiente: %s)",
+                config.api_base_url.scheme, config.api_base_url.host, config.api_base_url.port,
+                "ativado" if config.api_trust_env else "desativado")
     try:
-        with httpx.Client(timeout=10, follow_redirects=False) as client:
+        with create_esp32_client(config) as local_client, httpx.Client(
+                timeout=10, follow_redirects=False, trust_env=config.api_trust_env) as client:
             while True:
                 try:
-                    identifier = collect_once(client, config)
+                    identifier = collect_once(client, config, esp32_client=local_client)
                     logger.info("Medição armazenada: id=%s", identifier)
                 except (httpx.HTTPError, ValueError, KeyError, ValidationError) as exc:
                     # Do not log HTML, credentials or server response bodies.
-                    logger.error("Coleta não concluída (%s). Verifique rede, sensores e configuração.",
-                                 type(exc).__name__)
+                    logger.error("Coleta não concluída: %s. Verifique rede, sensores e configuração.",
+                                 describe_failure(exc))
                     if args.once:
                         raise SystemExit(1) from None
                 if args.once:
