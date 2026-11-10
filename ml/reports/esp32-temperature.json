@@ -1,0 +1,68 @@
+{
+  "model_id": "e5db7779-d496-47f3-92ca-c359bf8d1b61",
+  "device_id": "esp32-01",
+  "schema_version": 3,
+  "target": "temperature_c",
+  "algorithm": "RandomForestRegressor",
+  "parameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 8,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 3,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 100,
+    "n_jobs": 1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "sklearn_version": "1.9.1",
+  "features": [
+    "temperature_c",
+    "air_humidity_pct",
+    "temperature_5min_ago_c",
+    "humidity_5min_ago_pct",
+    "temperature_change_5min_c"
+  ],
+  "horizon_minutes": 5,
+  "feature_importances": {
+    "temperature_c": 0.4439861025491741,
+    "air_humidity_pct": 0.1721840890133394,
+    "temperature_5min_ago_c": 0.20214145452219617,
+    "humidity_5min_ago_pct": 0.14638781523173056,
+    "temperature_change_5min_c": 0.03530053868355964
+  },
+  "metrics": {
+    "model_mae": 6.1062781083453626,
+    "model_rmse": 6.573168840984067,
+    "baseline_mae": 1.7775000000000005,
+    "baseline_rmse": 2.199630650813904,
+    "unit": "celsius"
+  },
+  "beats_baseline": false,
+  "train_samples": 51,
+  "test_samples": 20,
+  "purged_samples": 8,
+  "train_start": "2026-11-10T00:52:00+00:00",
+  "train_target_end": "2026-11-10T10:00:00+00:00",
+  "test_start": "2026-11-10T10:57:00+00:00",
+  "test_end": "2026-11-10T11:21:00+00:00",
+  "dataset_sha256": "37109804edb7db9023597b35f2202a850c04e1d74e1e0af674ad93929dc3423f",
+  "calibration": {
+    "dry": 4095,
+    "wet": 2901,
+    "source": "firmware supplied by user; validate in field"
+  },
+  "source_max_id": 489,
+  "source_rows": 489,
+  "source_limit": 100000,
+  "source_limit_reached": false
+}

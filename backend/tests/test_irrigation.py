@@ -39,3 +39,15 @@ def test_threshold_and_recovery_do_not_produce_false_alerts():
     assert irrigation_advice(prediction(current=30,future=30))['state']=='normal'
     assert irrigation_advice(prediction(future=20),soil_threshold=15)['notify'] is False
     assert irrigation_advice(prediction(future=float('nan')))['state']=='unavailable'
+
+
+def test_current_rule_is_useful_but_never_pretends_to_be_ml():
+    from app.irrigation import current_condition
+    from datetime import datetime,timedelta,timezone
+    from types import SimpleNamespace
+    now=datetime.now(timezone.utc)
+    row=SimpleNamespace(received_at=now,measured_at=now,soil_raw=4095,air_humidity_pct=30)
+    result=current_condition(row,now)
+    assert result['state']=='attention'
+    assert result['is_ml'] is False and result['notify'] is False
+    assert current_condition(row,now+timedelta(minutes=6))['state']=='stale'

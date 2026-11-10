@@ -68,3 +68,9 @@ necessário para concluir a demonstração preditiva do sistema.
 Para publicar a funcionalidade, subir backend e frontend atualizados. Não há nova
 migração de banco; `GET /api/v1/predictions` passou a incluir o objeto `irrigation`.
 O firmware não precisa ser regravado para essa mudança.
+
+
+O novo modelo real de temperatura tem horizonte de 5 min e é exibido separadamente.
+Ele não aciona avisos de irrigação. O painel também mostra a condição atual por
+regra em uma seção própria, mesmo sem modelo de solo; esse aviso é explicitamente
+identificado como não-ML e não dispara notificação preditiva.

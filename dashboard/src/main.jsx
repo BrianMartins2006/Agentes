@@ -35,7 +35,7 @@ function exportCSV(rows) {
 }
 function App() {
   const [config,setConfig]=useState(null),[auto,setAuto]=useState(true),[tick,setTick]=useState(0);
-  const [state,setState]=useState({rows:[],latest:null,prediction:null,external:null,loading:false,message:'Abra a engrenagem no topo para conectar sua estação.',currentError:false});
+  const [state,setState]=useState({rows:[],latest:null,prediction:null,external:null,temperature:null,condition:null,loading:false,message:'Abra a engrenagem no topo para conectar sua estação.',currentError:false});
   const [formError,setFormError]=useState('');
   const [period,setPeriod]=useState(()=>({since:initialDate(),until:''}));
   const settingsDialog=useRef(null), settingsForm=useRef(null), settingsButton=useRef(null);
@@ -51,7 +51,7 @@ function App() {
   useEffect(()=>{
     if(!config)return;
     const controller=new AbortController();let active=true;
-    setState({rows:[],latest:null,prediction:null,external:null,loading:true,message:`Consultando ${config.device}…`,currentError:false});
+    setState({rows:[],latest:null,prediction:null,external:null,temperature:null,condition:null,loading:true,message:`Consultando ${config.device}…`,currentError:false});
     async function request(path,params) {
       const timeout=setTimeout(()=>controller.abort(),15000);
       try {const response=await fetch(API+path+'?'+params,{headers:{'X-API-Key':config.key},signal:controller.signal,cache:'no-store'});
@@ -59,13 +59,15 @@ function App() {
       } finally {clearTimeout(timeout);}
     }
     const params=new URLSearchParams({device_id:config.device,since:config.since,limit:1000});if(config.until)params.set('until',config.until);
-    Promise.allSettled([request('/api/v1/measurements',params),request('/api/v1/measurements',new URLSearchParams({device_id:config.device,limit:1})),request('/api/v1/predictions',new URLSearchParams({device_id:config.device})),request('/api/v1/experiments/soil',new URLSearchParams())]).then(results=>{
+    Promise.allSettled([request('/api/v1/measurements',params),request('/api/v1/measurements',new URLSearchParams({device_id:config.device,limit:1})),request('/api/v1/predictions',new URLSearchParams({device_id:config.device})),request('/api/v1/experiments/soil',new URLSearchParams()),request('/api/v1/predictions',new URLSearchParams({device_id:config.device,target:'temperature_c'})),request('/api/v1/current-condition',new URLSearchParams({device_id:config.device}))]).then(results=>{
       if(!active)return;
       const rows=results[0].status==='fulfilled'?results[0].value:[],latest=results[1].status==='fulfilled'?results[1].value[0]??null:null;
       const prediction=results[2].status==='fulfilled'?results[2].value:{status:'unavailable',reason:'Falha ao consultar o modelo.'};
       const external=results[3].status==='fulfilled'?results[3].value:{status:'unavailable',reason:'Experimento externo indisponível; confira o deploy da API.'};
+      const temperature=results[4].status==='fulfilled'?results[4].value:{status:'unavailable',reason:'Previsão de temperatura indisponível; confira a atualização da API.'};
+      const condition=results[5].status==='fulfilled'?results[5].value:null;
       const errors=results.slice(0,3).filter(r=>r.status==='rejected').map(r=>r.reason.name==='AbortError'?'Tempo de consulta esgotado.':r.reason.message);
-      setState({rows,latest,prediction,external,loading:false,currentError:results[1].status==='rejected',message:errors.length?[...new Set(errors)].join(' '):`${config.device} · Atualizado às ${new Date().toLocaleTimeString('pt-BR')}. ${rows.length===1000?'Limite de 1.000 amostras: reduza o período.':''} Tabela: até 100 linhas; CSV: todas as carregadas.`});
+      setState({rows,latest,prediction,external,temperature,condition,loading:false,currentError:results[1].status==='rejected',message:errors.length?[...new Set(errors)].join(' '):`${config.device} · Atualizado às ${new Date().toLocaleTimeString('pt-BR')}. ${rows.length===1000?'Limite de 1.000 amostras: reduza o período.':''} Tabela: até 100 linhas; CSV: todas as carregadas.`});
     });
     return()=>{active=false;controller.abort();};
   },[config,tick]);
@@ -88,7 +90,7 @@ function App() {
     if(!config){openSettings();return;}
     setConfig({...config,...dates});
   }
-  const {rows,latest,prediction,external,loading}=state;
+  const {rows,latest,prediction,external,temperature,condition,loading}=state;
   const age=latest?(Date.now()-new Date(latest.received_at))/1000:null;
   const status=loading?'Consultando':state.currentError?'Falha de comunicação':!config?'Aguardando conexão':!latest?'Dispositivo sem dados':age < -60?'Relógio inconsistente':age<=300?'Dados atualizados':'Dados atrasados';
   const available=prediction&&['available','experimental'].includes(prediction.status);
@@ -114,6 +116,8 @@ function App() {
     <form onSubmit={applyPeriod} className="history-filters"><label>Início<input name="since" type="datetime-local" required value={period.since} onChange={e=>setPeriod({...period,since:e.target.value})}/></label><label>Fim<input name="until" type="datetime-local" value={period.until} onChange={e=>setPeriod({...period,until:e.target.value})}/></label><button type="submit" className="secondary-button" disabled={loading}>Aplicar período</button><span className="muted">Fim vazio acompanha o presente</span></form>
     <section className="charts"><Chart rows={rows} field="temperature_c" title="Temperatura" unit="°C" color="#f1bb80"/><Chart rows={rows} field="air_humidity_pct" title="Umidade do ar" unit="%" color="#83c9d4"/><Chart rows={rows} field="soil_raw" title="Leitura do solo" unit="valor bruto" color="#b7f16e" wide/></section>
     <p className="muted">Datas no fuso do navegador. Lacunas maiores que 5 minutos interrompem as linhas. Cartões e previsão mostram o estado mais recente, independente do período filtrado.</p>
+    <section className="panel irrigation-card" aria-label="Condição atual por regra"><p className="eyebrow">CONDIÇÃO ATUAL · REGRA DE REFERÊNCIA, SEM ML</p><h2>{condition?.state==='attention'?'Atenção à umidade do solo':'Condição observada'}</h2><p role="status">{condition?.message||'Conecte a estação para avaliar a leitura atual.'}</p>{condition?.soil_pct!==undefined&&<p className="muted">Solo estimado: {num(condition.soil_pct)}% · Ar: {num(condition.air_humidity_pct)}% · {condition.quality_note}</p>}</section>
+    <section className="panel prediction" aria-label="Previsão de temperatura com dados da placa"><div><p className="eyebrow">ML COM DADOS REAIS DA ESP32 · RANDOM FOREST</p><h2>Temperatura: previsão para 5 minutos.</h2><p role="status">{temperature?.notice||temperature?.reason||'Conecte a estação para consultar o modelo de temperatura.'}</p>{temperature?.metrics&&<p className="muted">MAE do modelo: {num(temperature.metrics.model_mae,2)} °C · persistência: {num(temperature.metrics.baseline_mae,2)} °C. Modelo {temperature.model_id}. O resultado não determina irrigação.</p>}</div><div className="prediction-result"><strong>{temperature?.predicted_temperature_c!==undefined?`${num(temperature.predicted_temperature_c)} °C`:'—'}</strong>{temperature?.target_at&&<span>Para {fmt(temperature.target_at)}</span>}</div></section>
     <section className={`panel irrigation-card ${advice?.notify?'irrigation-warning':''}`} aria-label="Orientação de irrigação">
       <div className="section-title"><div><p className="eyebrow">AVISOS AO PRODUTOR · PREVISÃO DO MODELO</p><h2>{advice?.title||'Aguardando avaliação de irrigação'}</h2></div>
         <button type="button" className="secondary-button" onClick={notifications.enable} disabled={!notifications.supported||notifications.permission==='granted'}>{notifications.permission==='granted'?'Avisos do navegador ativados':'Ativar avisos do navegador'}</button>
@@ -123,7 +127,7 @@ function App() {
       <p className="muted">Limites de referência: solo abaixo de {advice?.soil_threshold_pct??30}% e ar abaixo de {advice?.air_threshold_pct??40}%. Ajustar à cultura e validar a calibração. O ar baixo, sozinho, não indica irrigação.</p>
       <p className="muted">{notifications.hint||'As notificações exigem permissão e esta página aberta. Não há envio de WhatsApp/e-mail ou acionamento automático de bomba.'}</p>
     </section>
-    <section className="panel prediction"><div><p className="eyebrow">APRENDIZADO DE MÁQUINA · RANDOM FOREST</p><p className="muted">{prediction ? `Treinamento automático ${prediction.automatic_training ? "ativado" : "desativado"}${prediction.trained_at ? ` · Último treino: ${fmt(prediction.trained_at)}` : ""}` : ""}</p><h2>Um olhar para os próximos 30 minutos.</h2><p role="status">{loading?'Consultando modelo…':available?prediction.notice:prediction?.reason||'Conecte a estação para consultar o modelo.'}</p>{available&&<p className="muted">MAE do modelo: {num(prediction.metrics.model_mae,2)} · baseline: {num(prediction.metrics.baseline_mae,2)} (leitura bruta). Modelo {prediction.model_id}. Percentual estimado: {num(prediction.estimated_soil_pct)}% pela calibração do firmware; validar no solo real.</p>}</div><div className="prediction-result"><strong>{available?num(prediction.predicted_soil_raw):'—'}</strong><span>leitura bruta prevista do solo</span>{available&&<span>Para {fmt(prediction.target_at)}</span>}</div></section>
+    <section className="panel prediction"><div><p className="eyebrow">APRENDIZADO DE MÁQUINA · RANDOM FOREST</p><p className="muted">{prediction ? `Treinamento automático ${prediction.automatic_training ? "ativado" : "desativado"}${prediction.trained_at ? ` · Último treino: ${fmt(prediction.trained_at)}` : ""}` : ""}</p><h2>Previsão do solo para 30 minutos.</h2><p role="status">{loading?'Consultando modelo…':available?prediction.notice:prediction?.reason||'Conecte a estação para consultar o modelo.'}</p>{available&&<p className="muted">MAE do modelo: {num(prediction.metrics.model_mae,2)} · baseline: {num(prediction.metrics.baseline_mae,2)} (leitura bruta). Modelo {prediction.model_id}. Percentual estimado: {num(prediction.estimated_soil_pct)}% pela calibração do firmware; validar no solo real.</p>}</div><div className="prediction-result"><strong>{available?num(prediction.predicted_soil_raw):'—'}</strong><span>leitura bruta prevista do solo</span>{available&&<span>Para {fmt(prediction.target_at)}</span>}</div></section>
     <section className="panel external-experiment" aria-label="Experimento de solo com dados públicos">
       <p className="eyebrow">EXPERIMENTO SEPARADO · DATASET PÚBLICO · RANDOM FOREST</p><h2>Aprendizado com solo em condições de campo</h2>
       <p className="muted">Este experimento usa dados históricos de outra estação. Não é uma previsão validada para sua ESP32 e não usa a escala bruta 0–4095.</p>

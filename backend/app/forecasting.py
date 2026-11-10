@@ -1,4 +1,4 @@
-"""Minute aggregates, chronological evaluation and versioned soil forecasts."""
+"""Minute aggregates, chronological evaluation and versioned soil and temperature forecasts."""
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -9,6 +9,22 @@ from statistics import mean
 HORIZON = 30
 LAG = 5
 FEATURES = ["soil_raw", "temperature_c", "air_humidity_pct", "soil_raw_5min_ago", "soil_change_5min"]
+TEMPERATURE_FEATURES = ["temperature_c", "air_humidity_pct", "temperature_5min_ago_c", "humidity_5min_ago_pct", "temperature_change_5min_c"]
+TARGETS = ("soil_raw", "temperature_c")
+
+
+def target_spec(target):
+    if target == "soil_raw":
+        return FEATURES, 30, 2, "soil_raw"
+    if target == "temperature_c":
+        return TEMPERATURE_FEATURES, 5, 3, "celsius"
+    raise ValueError("Alvo não suportado")
+
+
+def compatible_artifact(artifact, target):
+    features, _, version, _ = target_spec(target)
+    return (artifact.get("schema_version") == version and artifact.get("algorithm") == "RandomForestRegressor"
+            and artifact.get("features") == features and artifact.get("target", "soil_raw") == target)
 
 
 class InsufficientData(ValueError):
@@ -33,7 +49,15 @@ def aggregate(rows, now):
             for end, values in groups.items()}
 
 
-def feature_at(buckets, at):
+def feature_at(buckets, at, target="soil_raw"):
+    if target == "temperature_c":
+        start = at - timedelta(minutes=LAG)
+        segment = sorted(t for t in buckets if start <= t <= at)
+        if start not in buckets or at not in buckets or any(b-a > timedelta(minutes=2) for a,b in zip(segment,segment[1:])):
+            raise InsufficientData("Falta janela recente de temperatura; tolerância máxima de um minuto ausente")
+        _, temp, humidity = buckets[at]
+        _, previous, previous_humidity = buckets[start]
+        return [temp, humidity, previous, previous_humidity, temp-previous]
     if any(at - timedelta(minutes=i) not in buckets for i in range(LAG + 1)):
         raise InsufficientData("Faltam seis minutos consecutivos de leituras válidas")
     soil, temp, humidity = buckets[at]
@@ -41,47 +65,55 @@ def feature_at(buckets, at):
     return [soil, temp, humidity, previous, soil - previous]
 
 
-def make_examples(buckets):
+def make_examples(buckets, target="soil_raw"):
+    _, horizon, _, _ = target_spec(target)
     examples = []
     for at in sorted(buckets):
         # No interpolation across a communication gap, including the future horizon.
-        if any(at + timedelta(minutes=i) not in buckets for i in range(HORIZON + 1)):
-            continue
+        target_at = at + timedelta(minutes=horizon)
+        if target == "soil_raw":
+            if any(at + timedelta(minutes=i) not in buckets for i in range(horizon + 1)):
+                continue
+        else:
+            segment = sorted(t for t in buckets if at <= t <= target_at)
+            if target_at not in buckets or any(b-a > timedelta(minutes=2) for a,b in zip(segment,segment[1:])):
+                continue
         try:
-            features = feature_at(buckets, at)
+            features = feature_at(buckets, at, target)
         except InsufficientData:
             continue
-        target_at = at + timedelta(minutes=HORIZON)
-        examples.append((at, target_at, features, buckets[target_at][0]))
+        examples.append((at, target_at, features, buckets[target_at][0 if target == "soil_raw" else 1]))
     return examples
 
 
-def chronological_split(examples):
-    if len(examples) < 120:
-        raise InsufficientData("Necessárias pelo menos 120 janelas válidas de histórico")
+def chronological_split(examples, target="soil_raw"):
+    minimum, min_train, min_test = (120,60,20) if target == "soil_raw" else (60,30,15)
+    if len(examples) < minimum:
+        raise InsufficientData(f"Necessárias pelo menos {minimum} janelas válidas; disponíveis: {len(examples)}")
     split = int(len(examples) * .75)
     test = examples[split:]
     # Purge examples whose labels overlap the test feature window.
     boundary = test[0][0] - timedelta(minutes=LAG)
     train = [example for example in examples[:split] if example[1] < boundary]
-    if len(train) < 60 or len(test) < 20:
+    if len(train) < min_train or len(test) < min_test:
         raise InsufficientData("Histórico insuficiente após separar treino e teste no tempo")
     return train, test
 
 
-def fit_model(rows, now):
+def fit_model(rows, now, target="soil_raw"):
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.metrics import mean_absolute_error, root_mean_squared_error
     import sklearn
 
     if len({row.device_id for row in rows}) != 1:
         raise InsufficientData("Treine com dados de exatamente um dispositivo")
+    names, horizon, version, unit = target_spec(target)
     buckets = aggregate(rows, now)
-    examples = make_examples(buckets)
-    train, test = chronological_split(examples)
+    examples = make_examples(buckets, target)
+    train, test = chronological_split(examples, target)
     y_train = [e[3] for e in train]
-    if max(y_train) - min(y_train) < 1:
-        raise InsufficientData("Solo sem variação suficiente no conjunto de treino")
+    if max(y_train) - min(y_train) < (1 if target == "soil_raw" else .1):
+        raise InsufficientData(("Solo" if target == "soil_raw" else "Temperatura") + " sem variação suficiente no conjunto de treino")
     model = RandomForestRegressor(n_estimators=100, max_depth=8,
                                   min_samples_leaf=3, random_state=42, n_jobs=1)
     model.fit([e[2] for e in train], y_train)
@@ -93,16 +125,17 @@ def fit_model(rows, now):
         "model_rmse": float(root_mean_squared_error(actual, predictions)),
         "baseline_mae": float(mean_absolute_error(actual, baseline)),
         "baseline_rmse": float(root_mean_squared_error(actual, baseline)),
-        "unit": "soil_raw",
+        "unit": unit,
     }
     dataset = [[e[0].isoformat(), e[1].isoformat(), e[2], e[3]] for e in examples]
     return {
-        "schema_version": 2, "algorithm": "RandomForestRegressor",
+        "schema_version": version, "target": target, "algorithm": "RandomForestRegressor",
+        "prepared_at": now.isoformat(),
         "parameters": model.get_params(),
-        "sklearn_version": sklearn.__version__, "features": FEATURES,
-        "horizon_minutes": HORIZON,
+        "sklearn_version": sklearn.__version__, "features": names,
+        "horizon_minutes": horizon,
         "trees": export_trees(model),
-        "feature_importances": dict(zip(FEATURES, model.feature_importances_.tolist())),
+        "feature_importances": dict(zip(names, model.feature_importances_.tolist())),
         "metrics": metrics,
         "beats_baseline": metrics["model_mae"] < metrics["baseline_mae"],
         "train_samples": len(train), "test_samples": len(test),
@@ -144,7 +177,8 @@ def predict_trees(trees, features):
 
 
 def forecast(artifact, rows, now):
-    if artifact.get("schema_version") != 2 or artifact.get("algorithm") != "RandomForestRegressor" or artifact.get("features") != FEATURES:
+    target = artifact.get("target", "soil_raw")
+    if target not in TARGETS or not compatible_artifact(artifact, target):
         raise InsufficientData("Modelo antigo ou incompatível; execute novamente o treino com Random Forest")
     buckets = aggregate(rows, now)
     if not buckets:
@@ -152,15 +186,29 @@ def forecast(artifact, rows, now):
     at = max(buckets)
     if now - at > timedelta(minutes=5):
         raise InsufficientData("Últimas leituras atrasadas; previsão suspensa")
-    features = feature_at(buckets, at)
+    features = feature_at(buckets, at, target)
     estimate = predict_trees(artifact["trees"], features)
     if not math.isfinite(estimate):
         raise InsufficientData("Modelo produziu resultado inválido")
+    if target == "temperature_c":
+        trusted = artifact["beats_baseline"]
+        return {
+            "target": target, "status": "available" if trusted else "experimental",
+            "based_on": at.isoformat(),
+            "target_at": (at+timedelta(minutes=artifact["horizon_minutes"])).isoformat(),
+            "horizon_minutes": artifact["horizon_minutes"],
+            "current_temperature_c": round(features[0],2),
+            "predicted_temperature_c": round(estimate,2),
+            "metrics": artifact["metrics"], "beats_baseline": trusted,
+            "notice": "Previsão preliminar de temperatura com dados reais da placa; não determina irrigação." if trusted else
+                      "Modelo de temperatura treinado, mas não superou a persistência; resultado experimental.",
+        }
     calibration = artifact["calibration"]
     pct = max(0, min(100, 100 * (calibration["dry"] - estimate) /
                          (calibration["dry"] - calibration["wet"])))
     trusted = artifact["beats_baseline"]
     return {
+        "target": target,
         "status": "available" if trusted else "experimental",
         "based_on": at.isoformat(),
         "target_at": (at + timedelta(minutes=artifact["horizon_minutes"])).isoformat(),

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from secrets import compare_digest
-from typing import Annotated
+from typing import Annotated, Literal
 from pathlib import Path
 from contextlib import asynccontextmanager
 import asyncio
@@ -15,7 +15,8 @@ from app.config import settings
 from app.database import get_session
 from app.models import ForecastModel, Measurement
 from app.forecasting import forecast, InsufficientData
-from app.irrigation import irrigation_advice
+from app.model_queries import latest_model
+from app.irrigation import irrigation_advice, current_condition
 from app.schemas import MeasurementCreate, MeasurementRead
 from app.train_external import DEVICE_ID as EXTERNAL_DEVICE_ID, public_report
 from app.auto_train import training_loop
@@ -63,14 +64,14 @@ def health():
 
 
 @app.get("/api/v1/predictions", dependencies=[Depends(authenticate)])
-def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64)):
-    model = db.scalar(select(ForecastModel).where(ForecastModel.device_id == device_id)
-                      .order_by(ForecastModel.trained_at.desc(), ForecastModel.id.desc()).limit(1))
+def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64),
+               target: Literal["soil_raw", "temperature_c"] = "soil_raw"):
+    model = latest_model(db, device_id, target)
     if model is None:
         result = {"status": "unavailable", "reason": "Modelo ainda não treinado; aguardando histórico suficiente"}
         return {**result, "irrigation": irrigation_advice(result, settings.irrigation_soil_threshold_pct,
                                                           settings.irrigation_air_threshold_pct),
-                "device_id": device_id, "automatic_training": settings.ml_auto_train_enabled}
+                "device_id": device_id, "target":target, "automatic_training": settings.ml_auto_train_enabled}
     now = datetime.now(timezone.utc)
     rows = db.scalars(select(Measurement).where(Measurement.device_id == device_id,
                       Measurement.measured_at >= now - timedelta(minutes=15),
@@ -81,7 +82,7 @@ def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64)):
         result = {"status": "unavailable", "reason": str(exc)}
     result["irrigation"] = irrigation_advice(result, settings.irrigation_soil_threshold_pct,
                                              settings.irrigation_air_threshold_pct)
-    if result.get("status") == "available":
+    if result.get("status") == "available" and target == "soil_raw":
         result["notice"] = result["irrigation"]["message"]
     return {"device_id": device_id, "model_id": model.id,
             "trained_at": model.trained_at, "automatic_training": settings.ml_auto_train_enabled, **result}
@@ -95,6 +96,14 @@ def external_soil_experiment(db: Db):
         return {"status": "unavailable", "reason": "Experimento externo ainda não carregado"}
     return {"status": "external_experiment", "model_id": model.id,
             "trained_at": model.trained_at, **public_report(model.artifact)}
+
+
+@app.get("/api/v1/current-condition", dependencies=[Depends(authenticate)])
+def condition(db: Db, device_id: str = Query(min_length=1, max_length=64)):
+    row=db.scalar(select(Measurement).where(Measurement.device_id==device_id)
+                  .order_by(Measurement.measured_at.desc(),Measurement.id.desc()).limit(1))
+    return {"device_id":device_id, **current_condition(row,datetime.now(timezone.utc),
+            settings.irrigation_soil_threshold_pct,settings.irrigation_air_threshold_pct)}
 
 
 @app.post("/api/v1/measurements", response_model=MeasurementRead, status_code=201,

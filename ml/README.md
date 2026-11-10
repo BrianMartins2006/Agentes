@@ -1,8 +1,10 @@
 # Previsão de umidade do solo — primeira implementação
 
-O código de treino e inferência está implementado. **Ainda não há modelo treinado
-com leituras reais da placa, nem métricas de campo.** Os testes usam dados
-sintéticos isolados, que não são inseridos no histórico da aplicação.
+O treino de solo continua condicionado ao histórico suficiente. **Já existe um
+modelo separado de temperatura treinado com 489 leituras reais da placa**, com
+relatório em `reports/esp32-temperature.json`. Ele é preliminar e perdeu para a
+persistência. Os testes automatizados usam fixtures sintéticas isoladas, distintas
+do experimento de campo e sem inserção no banco de produção.
 
 ## O que o modelo aprende
 
@@ -173,3 +175,31 @@ A API interpreta o modelo da placa e inclui `irrigation` na resposta de previsã
 com estado, motivo, solo atual/previsto, ar e horário-alvo. Modelos ausentes, externos
 ou que não superaram o baseline não geram notificações de irrigação. A dashboard
 permite ativar avisos no navegador. Veja [`docs/avisos-irrigacao.md`](../docs/avisos-irrigacao.md).
+
+
+## Temperatura com dados da própria ESP32
+
+Foi acrescentado um segundo alvo independente: `temperature_c`, horizonte de 5 min,
+schema de artefato 3. Solo continua em `soil_raw`, horizonte 30 min, schema 2.
+Ambos são verificados pelo treino automático; as versões não se sobrescrevem.
+Nenhuma migração adicional é necessária, pois o alvo fica no JSON do artefato.
+
+A temperatura usa atributos atuais/defasados em cinco minutos de temperatura e
+umidade do ar. Exige os valores atuais, anteriores e futuros observados, aceita
+no máximo um minuto ausente entre pontos e não interpola. Mínimos técnicos: 60
+janelas, 30 exemplos de treino após purga e 15 de teste. Esses limites preliminares
+não garantem generalização. A divisão cronológica e a purga continuam presentes.
+
+```bash
+python -m app.train_model --device-id esp32-01 --target temperature_c --report ../ml/reports/temperatura-novo.json
+```
+
+Para reproduzir o primeiro corte no banco original, adicionar `--max-id 489 --as-of 2026-11-10T11:21:00+00:00`.
+A exportação desse corte está em `ml/data/esp32-temperature-training.csv` e pode
+ser entregue separadamente. A API aceita
+`GET /api/v1/predictions?device_id=esp32-01&target=temperature_c`.
+
+Resultado real do primeiro experimento: MAE 6,106278 °C e RMSE 6,573169 °C,
+contra MAE 1,777500 °C e RMSE 2,199631 °C da persistência. Treino 51/teste 20.
+O painel identifica a previsão como experimental. Não usar esse alvo para
+acionar irrigação ou alegar que o modelo supera a referência.

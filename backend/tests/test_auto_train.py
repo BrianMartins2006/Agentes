@@ -46,3 +46,14 @@ def test_automatic_train_cooldown_and_new_data_gate(db, monkeypatch):
     assert train_device(db, 'esp32-01', NOW+timedelta(minutes=10)) == 'cooldown'
     assert train_device(db, 'esp32-01', NOW+timedelta(hours=2)) == 'waiting_new_data'
     assert db.scalar(select(func.count()).select_from(ForecastModel)) == 1
+
+
+def test_targets_are_independent_in_model_storage(db):
+    from app.model_queries import latest_model
+    db.add(ForecastModel(id='soil',device_id='esp32-01',trained_at=NOW,
+                        artifact={'schema_version':2}))
+    db.add(ForecastModel(id='temperature',device_id='esp32-01',trained_at=NOW,
+                        artifact={'schema_version':3,'target':'temperature_c'}))
+    db.commit()
+    assert latest_model(db,'esp32-01','soil_raw').id=='soil'
+    assert latest_model(db,'esp32-01','temperature_c').id=='temperature'

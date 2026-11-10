@@ -55,3 +55,9 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Bases reais exportadas para a entrega acadêmica
+/ml/data/
+
+# Pacote da entrega gerado localmente
+/entrega/*.zip

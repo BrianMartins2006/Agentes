@@ -3,12 +3,13 @@
 Base inicial para ESP32 + FastAPI + PostgreSQL. Após autorização, foi preparado
 um firmware com configuração de Wi-Fi pelo celular; ainda não foi gravado na placa.
 Veja [`firmware/README.md`](firmware/README.md).
-O coletor HTML, a dashboard e o código de ML estão implementados. O treino com
-dados reais e a validação integrada em hardware/nuvem ainda estão pendentes.
+O coletor HTML, a dashboard e o código de ML estão implementados. O envio direto foi confirmado e um modelo preliminar de temperatura foi treinado
+com dados reais. A irrigação preditiva ainda requer validação de campo.
 
 ## 1. Entender a arquitetura
 
-ESP32 (DHT11 GPIO4, solo GPIO34) → coletor HTML → API FastAPI → PostgreSQL.
+ESP32 (DHT11 GPIO4, solo GPIO34) → HTTPS direto → FastAPI/Render → PostgreSQL/Supabase.
+Dashboard React/Vercel → API de dados e previsões. O coletor HTML é um modo legado.
 A dashboard consultará a API; o ML usará o histórico validado.
 O painel Wi-Fi atual continua funcionando de forma independente.
 
@@ -97,7 +98,7 @@ SQLite; o coletor usa respostas HTTP simuladas. Não substituem um teste de
 integração com PostgreSQL e ESP32 reais. Para essa
 verificação, suba o banco, aplique a migração e execute os exemplos HTTP acima.
 
-## 7. Conectar a ESP32 e avançar
+## 7. Coletor legado — alternativa ao envio direto
 
 O firmware fornecido expõe HTML em `http://IP_DA_ESP32/`. Configure `ESP32_URL`
 no `.env` com o IP exibido no Monitor Serial (115200 baud). O computador deve
@@ -129,7 +130,8 @@ Aplique `alembic upgrade head` antes: a migração 0002 cria o armazenamento dos
 modelos. Veja [`ml/README.md`](ml/README.md) para entender atributos, horizonte,
 preparação, separação temporal e comparação com baseline. Sem histórico suficiente,
 o comando não treina e a dashboard informa que o modelo está indisponível.
-Não há modelo real ou métricas de campo apresentados nesta entrega.
+O modelo de solo pode continuar indisponível. Um modelo separado de temperatura
+foi treinado com dados reais; suas métricas e limitações estão no relatório técnico.
 
 A configuração é para desenvolvimento local. Acesso remoto exige configuração de
 HTTPS e gestão de acesso. O banco está publicado apenas em localhost. Para parar
@@ -167,3 +169,18 @@ validação TLS e horário UTC via NTP. Consulte [`firmware/README.md`](firmware
 para preparar `secrets.h` e gravar na placa. Este modo dispensa o coletor local e a
 configuração de IP na troca de rede. O teste em hardware ainda precisa ser realizado;
 pare o coletor Python antes para evitar duplicação de amostras.
+
+
+## Entrega acadêmica preparada
+
+Veja o [relatório técnico](docs/relatorio-tecnico.md), o
+[dicionário de dados](docs/dicionario-dados.md), a
+[apresentação](docs/apresentacao.md) e a [matriz de requisitos](docs/requisitos-trabalho.md).
+A base real exportada fica em `ml/data/esp32-temperature-training.csv`, fora do Git,
+para entregar separadamente. O relatório do treino está em
+`ml/reports/esp32-temperature.json`.
+
+O backend agora mantém dois alvos independentes: solo (30 min) e temperatura (5 min).
+A dashboard distingue regra atual, previsão experimental e experimento público.
+A nova versão precisa ser publicada na Render/Vercel; o firmware já em operação
+continua compatível e não exige regravação para essas alterações.

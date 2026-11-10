@@ -8,22 +8,22 @@ from uuid import uuid4
 from sqlalchemy import func, select, text
 from app.config import settings
 from app.database import SessionLocal
-from app.forecasting import fit_model, InsufficientData
+from app.forecasting import fit_model, InsufficientData, compatible_artifact, TARGETS
+from app.model_queries import latest_model
 from app.models import ForecastModel, Measurement
 
 logger = logging.getLogger(__name__)
 
 
-def train_device(db, device_id, now):
+def train_device(db, device_id, now, target="soil_raw"):
     # Transaction-scoped advisory lock avoids duplicate automatic training across
     # API workers using the same PostgreSQL database. No network lock in SQLite QA.
     if db.get_bind().dialect.name == "postgresql":
-        lock_id = int.from_bytes(hashlib.sha256(device_id.encode()).digest()[:8], "big", signed=True)
+        lock_id = int.from_bytes(hashlib.sha256((device_id+":"+target).encode()).digest()[:8], "big", signed=True)
         if not db.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock_id}):
             return "locked"
-    latest = db.scalar(select(ForecastModel).where(ForecastModel.device_id == device_id)
-                       .order_by(ForecastModel.trained_at.desc(), ForecastModel.id.desc()).limit(1))
-    if latest and latest.artifact.get("schema_version") == 2:
+    latest = latest_model(db, device_id, target)
+    if latest and compatible_artifact(latest.artifact, target):
         if (now - latest.trained_at).total_seconds() < settings.ml_retrain_seconds:
             return "cooldown"
         watermark = latest.artifact.get("source_max_id", 0)
@@ -36,7 +36,7 @@ def train_device(db, device_id, now):
                       Measurement.id <= max_id).order_by(Measurement.measured_at.desc(), Measurement.id.desc())
                       .limit(100000)).all() if max_id else []
     try:
-        artifact = fit_model(rows, now)
+        artifact = fit_model(rows, now, target)
     except InsufficientData:
         return "insufficient_data"
     # Do not create versions when only incomplete minutes or invalid samples changed.
@@ -58,9 +58,10 @@ def run_cycle():
         return
     for device in devices:
         try:
-            with SessionLocal() as db:
-                result = train_device(db, device, datetime.now(timezone.utc))
-                logger.info("Treino automático: dispositivo=%s estado=%s", device, result)
+            for target in TARGETS:
+                with SessionLocal() as db:
+                    result = train_device(db, device, datetime.now(timezone.utc), target)
+                    logger.info("Treino automático: dispositivo=%s alvo=%s estado=%s", device, target, result)
         except Exception as exc:
             # Connection errors may contain credentials; log only the exception type.
             logger.warning("Treino automático falhou (%s)", type(exc).__name__)

@@ -86,3 +86,34 @@ def test_json_forest_matches_sklearn_predictions():
 def test_old_ridge_artifact_requires_retraining():
     with pytest.raises(InsufficientData, match="novamente o treino"):
         forecast({"schema_version": 1}, samples(), START + timedelta(minutes=400))
+
+
+def test_temperature_model_trains_when_soil_is_constant():
+    rows=samples()
+    for row in rows:row.soil_raw=4095
+    now=START+timedelta(minutes=400)
+    artifact=fit_model(rows,now,target='temperature_c')
+    result=forecast(artifact,rows,now)
+    assert artifact['target']=='temperature_c'
+    assert artifact['horizon_minutes']==5
+    assert artifact['metrics']['unit']=='celsius'
+    assert 'soil_raw' not in artifact['features']
+    assert math.isfinite(result['predicted_temperature_c'])
+    assert 'predicted_soil_raw' not in result
+
+
+def test_temperature_gaps_are_bounded_without_interpolation():
+    from app.forecasting import feature_at
+    buckets=aggregate(samples(30),START+timedelta(minutes=30))
+    at=START+timedelta(minutes=20)
+    del buckets[at-timedelta(minutes=2)]
+    assert feature_at(buckets,at,'temperature_c')
+    del buckets[at-timedelta(minutes=3)]
+    with pytest.raises(InsufficientData):feature_at(buckets,at,'temperature_c')
+
+
+def test_temperature_purge_keeps_test_features_after_train_labels():
+    examples=make_examples(aggregate(samples(),START+timedelta(minutes=400)),'temperature_c')
+    train,test=chronological_split(examples,'temperature_c')
+    assert train[-1][1] < test[0][0]-timedelta(minutes=5)
+    assert all(e[1]-e[0]==timedelta(minutes=5) for e in examples)

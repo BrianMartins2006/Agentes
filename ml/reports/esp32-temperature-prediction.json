@@ -1,0 +1,22 @@
+{
+  "target": "temperature_c",
+  "status": "experimental",
+  "based_on": "2026-11-10T11:28:00+00:00",
+  "target_at": "2026-11-10T11:33:00+00:00",
+  "horizon_minutes": 5,
+  "current_temperature_c": 26.6,
+  "predicted_temperature_c": 23.48,
+  "metrics": {
+    "model_mae": 6.1062781083453626,
+    "model_rmse": 6.573168840984067,
+    "baseline_mae": 1.7775000000000005,
+    "baseline_rmse": 2.199630650813904,
+    "unit": "celsius"
+  },
+  "beats_baseline": false,
+  "notice": "Modelo de temperatura treinado, mas não superou a persistência; resultado experimental.",
+  "model_id": "e5db7779-d496-47f3-92ca-c359bf8d1b61",
+  "device_id": "esp32-01",
+  "recorded_at": "2026-11-10T11:28:03.709603+00:00",
+  "source": "real ESP32 measurements"
+}

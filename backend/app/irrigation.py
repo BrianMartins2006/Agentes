@@ -1,5 +1,26 @@
 """Interpret a validated device forecast; thresholds are decision rules, not ML."""
 import math
+from datetime import timedelta
+
+
+def current_condition(row, now, soil_threshold=30, air_threshold=40):
+    base = {"source": "threshold_rule", "is_ml": False, "notify": False,
+            "soil_threshold_pct": soil_threshold, "air_threshold_pct": air_threshold}
+    if row is None:
+        return {**base, "state": "unavailable", "message": "Ainda não há leituras deste dispositivo."}
+    if now-row.received_at > timedelta(minutes=5) or now-row.measured_at > timedelta(minutes=5):
+        return {**base, "state": "stale", "message": "Leituras atrasadas; não é possível avaliar a condição atual."}
+    if row.received_at > now+timedelta(minutes=1) or row.measured_at > now+timedelta(minutes=1):
+        return {**base, "state": "unavailable", "message": "Horário inconsistente; verificar relógio da placa."}
+    soil=max(0,min(100,100*(4095-row.soil_raw)/(4095-2901)))
+    dry=soil < soil_threshold
+    return {**base, "state": "attention" if dry else "observed", "soil_pct": round(soil,1),
+            "soil_raw":row.soil_raw, "air_humidity_pct":row.air_humidity_pct,
+            "measured_at":row.measured_at.isoformat(),
+            "message": "Leitura indica solo seco: verificar necessidade de irrigação conforme a cultura." if dry else
+                       "Leitura do solo acima do limite de referência; continue acompanhando.",
+            "quality_note": "Leitura no ponto seco da calibração; se permanecer fixa, conferir instalação e resposta do sensor." if row.soil_raw>=4095 else
+                            "Percentual estimado com calibração 4095/2901; validar no solo utilizado."}
 
 
 def irrigation_advice(prediction, soil_threshold=30, air_threshold=40):
