@@ -64,6 +64,13 @@ def test_prediction_requires_auth_and_real_model(client):
     assert 'predicted_soil_raw' not in result.json()
 
 
+def test_external_experiment_is_separate_and_authenticated(client):
+    assert client.get('/api/v1/experiments/soil').status_code == 401
+    result = client.get('/api/v1/experiments/soil', headers=headers)
+    assert result.status_code == 200
+    assert result.json()['status'] == 'unavailable'
+
+
 def test_history_range_for_dashboard(client):
     client.post('/api/v1/measurements', json=payload, headers=headers)
     assert client.get('/api/v1/measurements?until=2026-11-09T11:00:00Z', headers=headers).json() == []

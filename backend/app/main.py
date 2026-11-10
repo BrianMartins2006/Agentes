@@ -16,6 +16,7 @@ from app.database import get_session
 from app.models import ForecastModel, Measurement
 from app.forecasting import forecast, InsufficientData
 from app.schemas import MeasurementCreate, MeasurementRead
+from app.train_external import DEVICE_ID as EXTERNAL_DEVICE_ID, public_report
 from app.auto_train import training_loop
 
 @asynccontextmanager
@@ -77,6 +78,16 @@ def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64)):
         result = {"status": "unavailable", "reason": str(exc)}
     return {"device_id": device_id, "model_id": model.id,
             "trained_at": model.trained_at, "automatic_training": settings.ml_auto_train_enabled, **result}
+
+
+@app.get("/api/v1/experiments/soil", dependencies=[Depends(authenticate)])
+def external_soil_experiment(db: Db):
+    model = db.scalar(select(ForecastModel).where(ForecastModel.device_id == EXTERNAL_DEVICE_ID)
+                      .order_by(ForecastModel.trained_at.desc(), ForecastModel.id.desc()).limit(1))
+    if model is None:
+        return {"status": "unavailable", "reason": "Experimento externo ainda não carregado"}
+    return {"status": "external_experiment", "model_id": model.id,
+            "trained_at": model.trained_at, **public_report(model.artifact)}
 
 
 @app.post("/api/v1/measurements", response_model=MeasurementRead, status_code=201,
