@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import { useIrrigationNotifications } from './irrigationNotifications';
 
 const API = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 const fmt = value => new Date(value).toLocaleString('pt-BR');
@@ -91,6 +92,8 @@ function App() {
   const age=latest?(Date.now()-new Date(latest.received_at))/1000:null;
   const status=loading?'Consultando':state.currentError?'Falha de comunicação':!config?'Aguardando conexão':!latest?'Dispositivo sem dados':age < -60?'Relógio inconsistente':age<=300?'Dados atualizados':'Dados atrasados';
   const available=prediction&&['available','experimental'].includes(prediction.status);
+  const advice=prediction?.irrigation;
+  const notifications=useIrrigationNotifications(advice,config?.device);
   return <><header><a className="brand" href="/">◉ <span>ambiente<span className="brand-dot">.</span></span></a><span className="eyebrow">ESP32 / MONITORAMENTO AMBIENTAL</span><div className="header-actions"><span className={`badge ${status==='Dados atualizados'?'good':'bad'}`}>{status}</span><button ref={settingsButton} type="button" className="settings-button" aria-label="Abrir configurações de conexão" aria-haspopup="dialog" onClick={openSettings} title="Configurações">
       <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m9 3-.7 2.4-2 .9L4 5.7 2.5 8.3l1.7 1.8-.2 2.2-1.7 1.8 1.5 2.6 2.4-.6 1.9 1.1.7 2.4h3l.8-2.4 1.9-1.1 2.4.6 1.5-2.6-1.7-1.8-.1-2.2 1.7-1.8-1.5-2.6-2.4.6-2-.9L12 3Z" transform="translate(1 1)"/><circle cx="12" cy="12" r="3"/></svg>
     </button></div></header>
@@ -111,6 +114,15 @@ function App() {
     <form onSubmit={applyPeriod} className="history-filters"><label>Início<input name="since" type="datetime-local" required value={period.since} onChange={e=>setPeriod({...period,since:e.target.value})}/></label><label>Fim<input name="until" type="datetime-local" value={period.until} onChange={e=>setPeriod({...period,until:e.target.value})}/></label><button type="submit" className="secondary-button" disabled={loading}>Aplicar período</button><span className="muted">Fim vazio acompanha o presente</span></form>
     <section className="charts"><Chart rows={rows} field="temperature_c" title="Temperatura" unit="°C" color="#f1bb80"/><Chart rows={rows} field="air_humidity_pct" title="Umidade do ar" unit="%" color="#83c9d4"/><Chart rows={rows} field="soil_raw" title="Leitura do solo" unit="valor bruto" color="#b7f16e" wide/></section>
     <p className="muted">Datas no fuso do navegador. Lacunas maiores que 5 minutos interrompem as linhas. Cartões e previsão mostram o estado mais recente, independente do período filtrado.</p>
+    <section className={`panel irrigation-card ${advice?.notify?'irrigation-warning':''}`} aria-label="Orientação de irrigação">
+      <div className="section-title"><div><p className="eyebrow">AVISOS AO PRODUTOR · PREVISÃO DO MODELO</p><h2>{advice?.title||'Aguardando avaliação de irrigação'}</h2></div>
+        <button type="button" className="secondary-button" onClick={notifications.enable} disabled={!notifications.supported||notifications.permission==='granted'}>{notifications.permission==='granted'?'Avisos do navegador ativados':'Ativar avisos do navegador'}</button>
+      </div>
+      <p role={advice?.notify?'alert':'status'}>{advice?.message||'Conecte o dispositivo para consultar o modelo e a condição de irrigação.'}</p>
+      {advice?.predicted_soil_pct!==undefined&&<p className="muted">Solo atual: {num(advice.current_soil_pct)}% · Previsto: {num(advice.predicted_soil_pct)}% · Umidade do ar: {num(advice.air_humidity_pct)}% · Horário previsto: {fmt(advice.target_at)}</p>}
+      <p className="muted">Limites de referência: solo abaixo de {advice?.soil_threshold_pct??30}% e ar abaixo de {advice?.air_threshold_pct??40}%. Ajustar à cultura e validar a calibração. O ar baixo, sozinho, não indica irrigação.</p>
+      <p className="muted">{notifications.hint||'As notificações exigem permissão e esta página aberta. Não há envio de WhatsApp/e-mail ou acionamento automático de bomba.'}</p>
+    </section>
     <section className="panel prediction"><div><p className="eyebrow">APRENDIZADO DE MÁQUINA · RANDOM FOREST</p><p className="muted">{prediction ? `Treinamento automático ${prediction.automatic_training ? "ativado" : "desativado"}${prediction.trained_at ? ` · Último treino: ${fmt(prediction.trained_at)}` : ""}` : ""}</p><h2>Um olhar para os próximos 30 minutos.</h2><p role="status">{loading?'Consultando modelo…':available?prediction.notice:prediction?.reason||'Conecte a estação para consultar o modelo.'}</p>{available&&<p className="muted">MAE do modelo: {num(prediction.metrics.model_mae,2)} · baseline: {num(prediction.metrics.baseline_mae,2)} (leitura bruta). Modelo {prediction.model_id}. Percentual estimado: {num(prediction.estimated_soil_pct)}% pela calibração do firmware; validar no solo real.</p>}</div><div className="prediction-result"><strong>{available?num(prediction.predicted_soil_raw):'—'}</strong><span>leitura bruta prevista do solo</span>{available&&<span>Para {fmt(prediction.target_at)}</span>}</div></section>
     <section className="panel external-experiment" aria-label="Experimento de solo com dados públicos">
       <p className="eyebrow">EXPERIMENTO SEPARADO · DATASET PÚBLICO · RANDOM FOREST</p><h2>Aprendizado com solo em condições de campo</h2>

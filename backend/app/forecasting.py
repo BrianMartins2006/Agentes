@@ -167,6 +167,9 @@ def forecast(artifact, rows, now):
         "horizon_minutes": artifact["horizon_minutes"],
         "predicted_soil_raw": round(estimate, 2),
         "estimated_soil_pct": round(pct, 1),
+        "current_soil_pct": round(max(0, min(100, 100 * (calibration["dry"] - features[0]) /
+                                                   (calibration["dry"] - calibration["wet"]))), 1),
+        "air_humidity_pct": round(features[2], 1),
         "calibration": calibration,
         "notice": ("Possível solo seco no horizonte previsto; verificar o solo" if pct < 30
                    else "Sem aviso de solo seco pela previsão" ) if trusted else

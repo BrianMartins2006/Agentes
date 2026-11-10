@@ -62,6 +62,8 @@ def test_prediction_requires_auth_and_real_model(client):
     assert result.status_code == 200
     assert result.json()['status'] == 'unavailable'
     assert 'predicted_soil_raw' not in result.json()
+    assert result.json()['irrigation']['notify'] is False
+    assert result.json()['irrigation']['state'] == 'unavailable'
 
 
 def test_external_experiment_is_separate_and_authenticated(client):

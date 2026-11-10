@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ml_check_seconds: int = Field(default=300, ge=30)
     ml_retrain_seconds: int = Field(default=3600, ge=300)
     ml_min_new_samples: int = Field(default=120, ge=1)
+    irrigation_soil_threshold_pct: float = Field(default=30, ge=0, le=100, allow_inf_nan=False)
+    irrigation_air_threshold_pct: float = Field(default=40, ge=0, le=100, allow_inf_nan=False)
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / ".env",
         extra="ignore",

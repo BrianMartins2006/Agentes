@@ -84,3 +84,9 @@ A seção **Experimento separado — Dataset público** consulta
 `/api/v1/experiments/soil` e mostra o Random Forest treinado em dados públicos,
 comparação com persistência e exemplos históricos, com fonte e licença. A seção
 não apresenta esses dados como leituras ou previsões válidas para a ESP32.
+
+
+A seção de orientação de irrigação interpreta a previsão da própria placa e permite
+ativar notificações do navegador. A permissão é solicitada ao clicar no botão; o
+painel precisa continuar aberto. Veja [`docs/avisos-irrigacao.md`](../docs/avisos-irrigacao.md)
+para estados, limites, deduplicação e condições reais de funcionamento.

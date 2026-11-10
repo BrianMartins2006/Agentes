@@ -165,3 +165,11 @@ ESP32 nem converte artificialmente os dados externos em leituras brutas.
 Veja [`EXTERNAL_DATASET.md`](EXTERNAL_DATASET.md) e
 [`reports/external-soil.json`](reports/external-soil.json) para fonte, licença,
 resultado efetivo e comandos. O modelo externo não superou a persistência no teste.
+
+
+## Orientação de irrigação
+
+A API interpreta o modelo da placa e inclui `irrigation` na resposta de previsão,
+com estado, motivo, solo atual/previsto, ar e horário-alvo. Modelos ausentes, externos
+ou que não superaram o baseline não geram notificações de irrigação. A dashboard
+permite ativar avisos no navegador. Veja [`docs/avisos-irrigacao.md`](../docs/avisos-irrigacao.md).

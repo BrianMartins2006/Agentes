@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import get_session
 from app.models import ForecastModel, Measurement
 from app.forecasting import forecast, InsufficientData
+from app.irrigation import irrigation_advice
 from app.schemas import MeasurementCreate, MeasurementRead
 from app.train_external import DEVICE_ID as EXTERNAL_DEVICE_ID, public_report
 from app.auto_train import training_loop
@@ -66,7 +67,9 @@ def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64)):
     model = db.scalar(select(ForecastModel).where(ForecastModel.device_id == device_id)
                       .order_by(ForecastModel.trained_at.desc(), ForecastModel.id.desc()).limit(1))
     if model is None:
-        return {"status": "unavailable", "reason": "Modelo ainda não treinado; aguardando histórico suficiente",
+        result = {"status": "unavailable", "reason": "Modelo ainda não treinado; aguardando histórico suficiente"}
+        return {**result, "irrigation": irrigation_advice(result, settings.irrigation_soil_threshold_pct,
+                                                          settings.irrigation_air_threshold_pct),
                 "device_id": device_id, "automatic_training": settings.ml_auto_train_enabled}
     now = datetime.now(timezone.utc)
     rows = db.scalars(select(Measurement).where(Measurement.device_id == device_id,
@@ -76,6 +79,10 @@ def prediction(db: Db, device_id: str = Query(min_length=1, max_length=64)):
         result = forecast(model.artifact, rows, now)
     except InsufficientData as exc:
         result = {"status": "unavailable", "reason": str(exc)}
+    result["irrigation"] = irrigation_advice(result, settings.irrigation_soil_threshold_pct,
+                                             settings.irrigation_air_threshold_pct)
+    if result.get("status") == "available":
+        result["notice"] = result["irrigation"]["message"]
     return {"device_id": device_id, "model_id": model.id,
             "trained_at": model.trained_at, "automatic_training": settings.ml_auto_train_enabled, **result}
 
