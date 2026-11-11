@@ -1,5 +1,8 @@
 # Monitoramento ambiental IoT
 
+A documentação detalhada fica fora do repositório, em
+`/home/brian/Agentes-documentacao/`. Os arquivos de código permanecem neste projeto.
+
 Base inicial para ESP32 + FastAPI + PostgreSQL. Após autorização, foi preparado
 um firmware com configuração de Wi-Fi pelo celular; ainda não foi gravado na placa.
 Veja [`firmware/README.md`](firmware/README.md).
@@ -14,13 +17,13 @@ A dashboard consultará a API; o ML usará o histórico validado.
 O painel Wi-Fi atual continua funcionando de forma independente.
 
 O atendimento ao enunciado está mapeado em
-[`docs/requisitos-trabalho.md`](docs/requisitos-trabalho.md), com PEAS, requisitos,
+`requisitos-trabalho.md` (`../Agentes-documentacao/requisitos-trabalho.md`), com PEAS, requisitos,
 pendências, proposta de ML e critérios de demonstração. O projeto ainda está em
 desenvolvimento e não atende integralmente aos requisitos.
 
 Para consultar diariamente o histórico do Supabase, foi preparado o comando
 `python -m app.daily_check`. Veja a configuração do agendamento e suas limitações
-em [`docs/consulta-diaria.md`](docs/consulta-diaria.md). Nenhum job foi ativado.
+em `consulta-diaria.md` (`../Agentes-documentacao/consulta-diaria.md`). Nenhum job foi ativado.
 
 ## 2. Conhecer a estrutura
 
@@ -29,7 +32,7 @@ em [`docs/consulta-diaria.md`](docs/consulta-diaria.md). Nenhum job foi ativado.
 - `backend/app/collector.py`: lê o HTML existente da ESP32 e envia medições à API.
 - `backend/tests`: testes da API com SQLite e do coletor com HTTP simulado.
 - `compose.yaml`: PostgreSQL local com volume persistente.
-- `docs/integracao-esp32.md`: informações necessárias para conectar o dispositivo.
+- `../Agentes-documentacao/integracao-esp32.md`: informações necessárias para conectar o dispositivo.
 - `dashboard/`: interface web com gráficos, filtros e previsão.
 - `ml/`: guia de treinamento e avaliação; implementação em `backend/app/forecasting.py`.
 
@@ -117,7 +120,7 @@ python -m app.collector
 O primeiro comando testa uma coleta; o segundo mantém a coleta contínua (10 segundos
 entre ciclos por padrão). Use Ctrl+C para encerrar. Não execute múltiplas instâncias
 para o mesmo dispositivo, pois não há deduplicação. O coletor é compatível com o HTML original e com o novo firmware de configuração
-Wi-Fi em `firmware/`. O fluxo e as limitações estão em `docs/integracao-esp32.md`.
+Wi-Fi em `firmware/`. O fluxo e as limitações estão em `../Agentes-documentacao/integracao-esp32.md`.
 
 A dashboard já exibe gráficos, filtros, estado e a saída do ML quando disponível.
 Para treinar com o histórico real, dentro de `backend/`, execute:
@@ -156,7 +159,7 @@ Veja [`ml/README.md`](ml/README.md). Nenhum deploy foi realizado nesta etapa.
 ## Deploy da API e proteção do Supabase
 
 A configuração da Render está em `render.yaml`. Siga
-[`docs/deploy-render.md`](docs/deploy-render.md) para conectar o repositório e
+`deploy-render.md` (`../Agentes-documentacao/deploy-render.md`) para conectar o repositório e
 configurar os segredos. A migração `0003` habilita RLS em `measurements`,
 `forecast_models` e `alembic_version`, sem políticas públicas. O acesso direto do
 backend com o proprietário do banco é preservado.
@@ -173,9 +176,9 @@ pare o coletor Python antes para evitar duplicação de amostras.
 
 ## Entrega acadêmica preparada
 
-Veja o [relatório técnico](docs/relatorio-tecnico.md), o
-[dicionário de dados](docs/dicionario-dados.md), a
-[apresentação](docs/apresentacao.md) e a [matriz de requisitos](docs/requisitos-trabalho.md).
+Veja o relatório técnico (`../Agentes-documentacao/relatorio-tecnico.md`), o
+dicionário de dados (`../Agentes-documentacao/dicionario-dados.md`), a
+apresentação (`../Agentes-documentacao/apresentacao.md`) e a matriz de requisitos (`../Agentes-documentacao/requisitos-trabalho.md`).
 A base real exportada fica em `ml/data/esp32-temperature-training.csv`, fora do Git,
 para entregar separadamente. O relatório do treino está em
 `ml/reports/esp32-temperature.json`.

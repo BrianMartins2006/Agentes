@@ -88,5 +88,5 @@ não apresenta esses dados como leituras ou previsões válidas para a ESP32.
 
 A seção de orientação de irrigação interpreta a previsão da própria placa e permite
 ativar notificações do navegador. A permissão é solicitada ao clicar no botão; o
-painel precisa continuar aberto. Veja [`docs/avisos-irrigacao.md`](../docs/avisos-irrigacao.md)
+painel precisa continuar aberto. Veja `avisos-irrigacao.md` (`../../Agentes-documentacao/avisos-irrigacao.md`)
 para estados, limites, deduplicação e condições reais de funcionamento.

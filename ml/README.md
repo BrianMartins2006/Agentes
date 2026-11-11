@@ -174,7 +174,7 @@ resultado efetivo e comandos. O modelo externo não superou a persistência no t
 A API interpreta o modelo da placa e inclui `irrigation` na resposta de previsão,
 com estado, motivo, solo atual/previsto, ar e horário-alvo. Modelos ausentes, externos
 ou que não superaram o baseline não geram notificações de irrigação. A dashboard
-permite ativar avisos no navegador. Veja [`docs/avisos-irrigacao.md`](../docs/avisos-irrigacao.md).
+permite ativar avisos no navegador. Veja `avisos-irrigacao.md` (`../../Agentes-documentacao/avisos-irrigacao.md`).
 
 
 ## Temperatura com dados da própria ESP32
